@@ -58,6 +58,7 @@ str_count(new1,'No        Yes')
 make_names=function(table_entry){
   
   mapped_var=list()
+  mapped_var2=list()
   
   #isolated to first table (IE) criteria only at this point
   for(i in 1:10){
@@ -89,15 +90,15 @@ make_names=function(table_entry){
     
     else{
       #print(table_entry[i,]$V1)
-      mapped_var[i]=substr(table_entry[i,]$V1,1,4)
+      mapped_var2[i]=substr(table_entry[i,]$V1,1,4)
       
     }
     
     
   }
-  
+  total=append(mapped_var,mapped_var2)
   #return(new_list)
-  return(mapped_var%>%unlist())
+  return(total%>%unlist())
   
 }
 
