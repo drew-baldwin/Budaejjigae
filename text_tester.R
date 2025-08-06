@@ -20,26 +20,94 @@ rm(list = ls())
 ie_data=read_sas('Z:/Biostats/Studies/PTL-1000234-G7-Test-Drive-IH2/Data/Rawdata/Inclusion_Exclusion.sas7bdat')
 
 
+
+#read in the data dictionary, as this has both the text from CRF and also the variable names. 
+
+
+data_dict=read_excel('Medrio_Data_Dictionary_LIVE_Dexcom_PTL1000505_Test_Drive_IH_Multi_Session_22072025_1630.xlsx',sheet='Forms') #first file. 
+
+code_dict=read_excel('Medrio_Data_Dictionary_LIVE_Dexcom_PTL1000505_Test_Drive_IH_Multi_Session_22072025_1630.xlsx',sheet='Code Lists')
+
+#now break this into two separate DFs, one is the text DF, the other is the variable DF. 
+
+text_dict=data_dict%>%filter(data_dict$`Object Type`=='Text on Form')
+var_dict=data_dict%>%filter(data_dict$`Object Type`=='Variable')
+
+
+
+#for the text_dict we only need to store the text variable, and the IDs. This may not be used at all since this text seems to be the titles of the individual cells, ie not linked
+#to a variable.
+
+text_dict=text_dict%>%select('Form Name','Form Export Name','Form External ID','Text')
+
+#now we work with the variable dictionary to link text to the variable name.
+
+var_dict=var_dict%>%select('Form Name','Form Export Name','Form External ID','Variable Name','Variable Export Name','SAS Label Export','Variable External ID','Label Text on Form')
+
+
+#to test text distance matching, create new column to fill in for automation pipeline variable, then make small changes. 
+
+for(i in 1:nrow(var_dict)){
+  
+  var_dict$automation_var[i]=paste(var_dict$`Variable Name`[i],sample(LETTERS,1),sep='')
+  var_dict$automation_var2[i]=paste(var_dict$automation_var[i],sample(LETTERS,1),sep='')
+  
+  
+}
+
+#now check the text distance between the real variable and the automation pipeline.
+library('stringdist')
+library('text2vec')
+
+
+for(i in 1:nrow(var_dict)){
+  
+  var_dict$distances[i]=stringdist(var_dict$`Variable Name`[i],var_dict$automation_var2[i],method='jw')
+  
+}
+
+
+
+
+
+tokens=word_tokenizer(c(a,b))
+it=itoken(tokens)
+v=create_vocabulary(it)
+
+dtm=create_dtm(it,vocab_vectorizer(v))
+sim2(dtm,method='cosine')
+
+
+stringdist(a,b,method='jw')
+
+
+
+
+
+
+
 #install.packages("officer")
  
 
-library('officer')
+#library('officer')
 
 
-start_time <- Sys.time()
+#start_time <- Sys.time()
 
-doc=read_docx('Z:/Biostats/Studies/PTL-1000234-G7-Test-Drive-IH2/Documents/CRF/PTL1000234_Test_Drive_IH2_CRF_Final.docx')
-end_time <- Sys.time()
+#doc=read_docx('Z:/Biostats/Studies/PTL-1000234-G7-Test-Drive-IH2/Documents/CRF/PTL1000234_Test_Drive_IH2_CRF_Final.docx')
+#end_time <- Sys.time()
 
-print(end_time-start_time)
+#print(end_time-start_time)
 
 #install.packages('textreadr')
 
 library('docxtractr')
 
 
-doc <- read_docx('Z:/Biostats/Studies/PTL-1000234-G7-Test-Drive-IH2/Documents/CRF/PTL1000234_Test_Drive_IH2_CRF_Final.docx')
-tables <- docx_extract_all_tbls(doc)
+my_doc <- read_docx('Z:/Biostats/Studies/PTL-1000234-G7-Test-Drive-IH2/Documents/CRF/PTL1000234_Test_Drive_IH2_CRF_Final.docx')
+tables <- docx_extract_all_tbls(my_doc)
+
+tables=docx_extract_all_tbls(my_doc, guess_header = TRUE)
 
 #for each table, the row is a variable name (roughly), but for some rows there are multiple subquestions.
 #we need to write a function that will split this into multiple rows to assign variable.
@@ -102,7 +170,7 @@ make_names=function(table_entry){
   
 }
 
-make_names(tables[[1]])
+make_names(tables[[2]])
 
 
 
