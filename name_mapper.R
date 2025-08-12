@@ -6,12 +6,19 @@ library(purrr)
 library(stringr)
 library(tools)
 library(readxl)
+library(clue)  
 library('stringdist')
 library('text2vec')
 
 
 #first we read in the data dictionary for the standardized IH test drive studies. 
-dd=read_excel('C:/Users/jk73268/OneDrive - Dexcom/Documents/data_dictionaries/data_dictionary_ih_test_drive.xlsx',sheet='Forms')
+dd=read_excel('C:/Users/jk73268/OneDrive - Dexcom/Documents/data_dictionaries/test_drive_3_7_dd.xlsx',sheet='Forms')
+
+
+#second DD
+#dd=read_excel('C:/Users/jk73268/OneDrive - Dexcom/Documents/data_dictionaries/Medrio_Data_Dictionary_LIVE_Dexcom_PTL1000505_Test_Drive_IH_Multi_Session_22072025_1630.xlsx',sheet='Forms')
+
+
 
 #now we subset, and create the text/variable names used in our automation pipeline
 var_dict=dd%>%filter(dd$`Object Type`=='Variable')
@@ -24,10 +31,55 @@ var_dict=var_dict%>%select('Form Name','Form Export Name','Form External ID','Va
 
 pipeline=var_dict%>%select('Form Name','Form Export Name','Variable Name','SAS Label Export')
 
+
+
 pipeline_vars=pipeline$`Variable Name`
 
 #make a new column in the pipeline for pipeline form names, cleaned up
 pipeline$forms=trimws(gsub('_S0\\w*','',pipeline$`Form Export Name`)) #note this may need to change based on study.
+
+pipeline=pipeline%>%select('Variable Name','SAS Label Export','forms')
+
+
+#because the data dictionary does not seem to have medrioid/subjectID/subject status, and the form (CRF form name) 
+#we need to manually add this to the data dictionary we are using for our pipeline variables. 
+
+
+crf_forms=unique(pipeline$forms)
+
+#for each of the unique forms, we need to add a variable (row) for medrioid, subjectid, subject status, and also the form name itself.
+medrioid=c('medrioid','Medrio ID',NA)
+subjectid=c('subjectid','Subject ID',NA)
+subjectstatus=c('subjectstatus','Subject Status',NA)
+form_name=c('Form','Form',NA)
+site=c('site','Site',NA)
+formentrydate=c('formentrydt','Form Entry Date',NA)
+visit=c('visit','Visit',NA)
+subjectvstformid=c('subjectvstformid','Subject Visit Form ID',NA)
+
+
+total_addition=data.frame(rbind(medrioid,subjectid,subjectstatus,form_name,site,formentrydate,visit,subjectvstformid))
+colnames(total_addition)=names(pipeline)
+
+updated_pipeline=list()
+#iterate through each form in pipeline, subset and then add new rows. Then store in list. Take the list and combine all dataframes back together.
+for(f in crf_forms){
+  
+  my_df=pipeline%>%filter(forms==f)
+  
+  total_addition[,3]=f
+  
+  my_df=rbind(my_df,total_addition)
+  
+  updated_pipeline[[f]]=my_df
+  
+}
+
+total_pipeline=do.call(rbind,updated_pipeline)
+
+
+
+
 
 
 
@@ -55,48 +107,16 @@ get_crf_form_names=function(folder_path){
 
 check=get_crf_form_names('Z:/Biostats/Studies/PTL-1000234-G7-Test-Drive-IH2/Data/Rawdata/')
 
-for(i in 1:length(check)){
-  
-  print(i)
-  
-}
-
-
-
-u=list.files(path='Z:/Biostats/Studies/PTL-1000234-G7-Test-Drive-IH2/Data/RawData',pattern='\\.sas7bdat',full.names=TRUE)
-
-
-
-sas_files = u[!grepl("sensor|meter", u)]
-
-subset=sas_files[1:3]
-
-df_names=file_path_sans_ext(basename(subset))
-
-df_names2=df_names%>%unlist()
-
-
-for(n in df_names2){
-  
-  print(df_names2[n])
-}
 
 
 
 
-datasets=setNames(lapply(subset,read_sas),df_names)
-
-check_df=datasets[['Additional_Comments']]
 
 
+#a different approach is to use the data dictionary from the study itself
+#and compare it to the data dictionary template that is used across studies.
 
-datasets <- lapply(subset, read_sas) #this works, but its very slow.
 
-names(column_names_list) <- basename(sas_files)
-
-column_names_list <- lapply(u, function(file) {
-  colnames(read_sas(file, n_max = 0))
-})
 
 
 
@@ -107,7 +127,18 @@ column_names_list <- lapply(u, function(file) {
 #now we can use the list of form names as input to our next function to create the map for only that form. 
 
 #the following function will take in the study folder path, the pipeline naming dataset, and will create the map for each
-#form from the CRF. Then we stack all the maps together to get the overall study map.
+#form from the CRF variables that come from the DATASETS. Then we stack all the maps together to get the overall study map.
+
+
+#sometimes the dataset names don't match the form name exactly. Its best to strip the form names to keep only the main characters
+#currently we remove the S02x from each dataset and form, as this may cause issues.
+
+
+
+#NEXT STEPS: WITHIN A FORM, ENSURE THAT WE DON'T LET A PIPELINE VARIABLE MAP TO MORE THAN ONE CRF VARIABLE.
+
+
+
 create_map=function(study_path,pipeline_variables){
   
   
@@ -116,26 +147,26 @@ create_map=function(study_path,pipeline_variables){
   file_names <- list.files(path = study_path, pattern = "\\.sas7bdat$", full.names = TRUE)
   
   
-  #new_file_names=basename(file_names) |> file_path_sans_ext()
-  
-  
-  #new_file_names=tolower(subset)
-  
-  #replace the '_' with space
-  #new_file_names2=tolower(gsub('_',' ',new_file_names))
-  
-  #read in the actual datasets and store as a list.
-  sas_files = file_names[!grepl("sensor|meter", u)]
-  
-  
   #make temporary subset to make sure the function works 
-  subset=sas_files[1:3]
+  subset=file_names[1:length(file_names)]
+  #subset=sas_files[1:3]
   
-  df_names=file_path_sans_ext(basename(subset))
+  #df_names=file_path_sans_ext(basename(subset))
+  df_names=trimws(gsub('_S0\\w*','',file_path_sans_ext(basename(subset))))
   
   df_names2=df_names%>%unlist() #this is needed to access the names in for loop later
   
   crf_datasets=setNames(lapply(subset,read_sas),df_names)
+  
+  
+  #need to add a step, because the SAS datasets have '_coded' attached to some variables. 
+  #for us we can remove these variables from the datasets initially to get a working prototype.
+  
+  
+  crf_datasets <- lapply(crf_datasets, function(df) {
+    df %>% select(!contains("_CODED"))
+  })
+  
 
 
   
@@ -145,7 +176,7 @@ create_map=function(study_path,pipeline_variables){
     
     if (!is.null(crf_datasets[[n]])) {
       
-      pipeline_variables <- pipeline %>%
+      pipeline_variables <- total_pipeline %>%
         filter(forms %in% n) %>%
         pull(`Variable Name`)%>%tolower()
       
@@ -187,97 +218,139 @@ create_map=function(study_path,pipeline_variables){
 }
 
 
-check=create_map('Z:/Biostats/Studies/PTL-1000234-G7-Test-Drive-IH2/Data/Rawdata/',pipeline)
-
-ae=read_sas('Z:/Biostats/Studies/PTL-1000234-G7-Test-Drive-IH2/Data/Rawdata/Adverse_Event.sas7bdat')
+check=create_map('Z:/Biostats/Studies/PTL-1000234-G7-Test-Drive-IH3/Data/Rawdata/',pipeline)
 
 
-#the first step is to extract all variable names from the CRF data, and lowercase them for easy distance metrics computation.
+#look through each dataset, and count the variables that are not matching. 
+combined_maps=do.call(rbind,check)
 
-names(crf_data)=tolower(names(crf_data))
+#flag the variables that are not equal (map was wrong)
 
-#now store this vector of names to allow us to relate to automation pipeline variables. 
+combined_maps=combined_maps %>% mutate(flag_diff = crf_name_original != linked_pipeline)
 
-crf_variables=names(crf_data)
+#visually inspect the rows. 
+mismatched=combined_maps%>%filter(flag_diff=='TRUE')
 
 
-#now lets say our pipeline takes in the previous dataset, counts the number of unique subjects, and lists how many are enrolled, and how many are in analysis. 
+sum(combined_maps$crf_name_original!=combined_maps$linked_pipeline)
 
-#the automation pipeline variables are as follows 
-pipeline_variables=c('subjectid','insdt_first','screenfail','enrolled','anal_flg','flag_dstst','flag_dsten')
 
-#now we need to associate the crf_variables to the pipeline variables, accounting for small differences. 
-#to do this, we use text distances. Specifically, for each crf variable, find the pipeline variable that has the smallest distance and link them. 
 
-link_vars=function(crf_names,pipeline_names){
-  
-  min_distance=sapply(crf_names,function(x) {pipeline_names[which.min(stringdist(x,pipeline_names,method='jw'))]})
-  
-  my_map=data.frame(crf_name_original=crf_names,linked_pipeline=min_distance)
-  
-  return(my_map)
+
+#THIS VERSION USES A SLIGHTLY DIFFERENT APPROACH TO FORCE A 1-1 MAP. 
+
+
+
+create_map2=function(study_path,pipeline_variables){
   
   
+  #we again read in all the SAS datasets, but this time we store the data, and the name used to filter to that form
+  
+  file_names <- list.files(path = study_path, pattern = "\\.sas7bdat$", full.names = TRUE)
+  
+  
+  #make temporary subset to make sure the function works 
+  subset=file_names[1:length(file_names)]
+  #subset=sas_files[1:3]
+  
+  #df_names=file_path_sans_ext(basename(subset))
+  df_names=trimws(gsub('_S0\\w*','',file_path_sans_ext(basename(subset))))
+  
+  df_names2=df_names%>%unlist() #this is needed to access the names in for loop later
+  
+  crf_datasets=setNames(lapply(subset,read_sas),df_names)
+  
+  
+  #need to add a step, because the SAS datasets have '_coded' attached to some variables. 
+  #for us we can remove these variables from the datasets initially to get a working prototype.
+  
+  
+  crf_datasets <- lapply(crf_datasets, function(df) {
+    df %>% select(!contains("_CODED"))
+  })
+  
+  
+  
+  
+  list_of_maps <- list()
+  
+  for (n in df_names2) {
+    
+    if (!is.null(crf_datasets[[n]])) {
+      
+      pipeline_variables <- total_pipeline %>%
+        filter(forms %in% n) %>%
+        pull(`Variable Name`)%>%tolower()
+      
+      names(crf_datasets[[n]]) <- tolower(names(crf_datasets[[n]]))
+      crf_variables <- names(crf_datasets[[n]])
+      
+      if (length(pipeline_variables) > 0) {
+        
+        
+        # Create distance matrix
+        distance_matrix <- stringdistmatrix(crf_variables, pipeline_variables, method = "jw")
+        
+        
+        n_rows <- length(crf_variables)
+        n_cols <- length(pipeline_variables)
+        
+        if (n_rows > n_cols) {
+          pad_matrix <- matrix(max(distance_matrix) + 1, nrow = n_rows, ncol = n_rows - n_cols)
+          distance_matrix <- cbind(distance_matrix, pad_matrix)
+        }
+        
+        
+        
+        
+        # Solve assignment problem (Hungarian algorithm)
+        assignment <- solve_LSAP(distance_matrix)
+        
+        # Get matched pipeline variables
+        matched_pipeline <- pipeline_variables[assignment]
+        
+        
+      } else {
+        warning(sprintf("No pipeline variables found for form '%s'.", n))
+        min_distance <- rep(NA, length(crf_variables))
+      }
+      
+      my_map <- data.frame(
+        crf_name_original = crf_variables,
+        linked_pipeline = min_distance,
+        stringsAsFactors = FALSE
+      )
+      
+      list_of_maps[[n]] <- my_map
+      #list_of_maps[[n]] <- pipeline_variables
+      
+    } else {
+      message(sprintf("Dataset '%s' is NULL and was skipped.", n))
+    }
+  }
+  #return(pipeline_variables)
+  
+  
+  return(list_of_maps)
 }
 
 
-#this returns a two column dataframe, where the last column shows the pipeline linked variables based on text distance. 
-#we would also check this using our NLP model based on all data dictionaries, and present the linked names to the user to confirm for the app.
+check=create_map('Z:/Biostats/Studies/PTL-1000234-G7-Test-Drive-IH3/Data/Rawdata/',pipeline)
 
 
-check=link_vars(crf_variables,pipeline_variables)
+#look through each dataset, and count the variables that are not matching. 
+combined_maps=do.call(rbind,check)
 
-#now we simply replace the names in the dataframe from CRF to the new names.
+#flag the variables that are not equal (map was wrong)
 
-colnames(crf_data)=check$linked_pipeline
+combined_maps=combined_maps %>% mutate(flag_diff = crf_name_original != linked_pipeline)
 
-
-
-automation_pipeline_summary=function(df){
-  
-  unique_ids=df%>%pull(subjectid)%>%n_distinct()
-  
-  number_enrolled=df%>%filter(enrolled==1)%>%nrow()
-  
-  return(list(unique_ids,number_enrolled))
-  
-  
-  
-}
-
-#now use the automation_pipeline_summary and ensure it works. 
-
-my_summary=automation_pipeline_summary(crf_data)
+#visually inspect the rows. 
+mismatched=combined_maps%>%filter(flag_diff=='TRUE')
 
 
+sum(combined_maps$crf_name_original!=combined_maps$linked_pipeline)
 
-
-#write some code that does some analysis using the names in the automation pipeline. 
-
-summary_function=function(df,mapper){
-  
-  
-  return(length(df%>%pull(subjid)%>%unique()))
-  
-  
-}
-
-
-
-#our code uses 'subjid' instead of the SubjectID used from the CRF. 
-automation_pipeline_names=c('subject','Site','icfdat')
-crf_variable_names=c('SubjectID','Site','ICFDAT')
-
-crf_data2=crf_data%>%select(crf_variable_names)
-
-#now use naming map to populate the information from CRF variables to our automation pipeline variables. 
-
-name_map=setNames(automation_pipeline_names,crf_variable_names)
-
-names(crf_data2)=name_map[names(crf_data2)]
-
-
-#have to deal with the case where the variable names may be wrong etc.
 
 
 
