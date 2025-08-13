@@ -58,9 +58,13 @@ formentrydate=c('formentrydt','Form Entry Date',NA)
 visit=c('visit','Visit',NA)
 subjectvstformid=c('subjectvstformid','Subject Visit Form ID',NA)
 vargroup1row=c('vargroup1row','vargroup1row',NA)
+othsterm=c('othsterm','Othsterm',NA)
+formexternalid=c('formexternalid','Form External ID',NA)
+studytitle=c('studytitle','study title',NA)
 
 
-total_addition=data.frame(rbind(medrioid,subjectid,subjectstatus,form_name,site,formentrydate,visit,subjectvstformid,vargroup1row))
+
+total_addition=data.frame(rbind(medrioid,subjectid,subjectstatus,form_name,site,formentrydate,visit,subjectvstformid,vargroup1row,othsterm,formexternalid,studytitle))
 colnames(total_addition)=names(pipeline)
 
 updated_pipeline=list()
@@ -243,7 +247,8 @@ sum(combined_maps$crf_name_original!=combined_maps$linked_pipeline)
 
 
 
-create_map2 <- function(study_path, pipeline_variables) {
+
+create_map2 <- function(study_path, pipeline_variables, distance_threshold = 0.2) {
 
   
   file_names <- list.files(path = study_path, pattern = "\\.sas7bdat$", full.names = TRUE)
@@ -257,6 +262,8 @@ create_map2 <- function(study_path, pipeline_variables) {
   })
   
   list_of_maps <- list()
+  list_of_unmatched_crf <- list()
+  list_of_unmatched_pipeline <- list()
   
   for (n in df_names2) {
     if (!is.null(crf_datasets[[n]])) {
@@ -272,11 +279,13 @@ create_map2 <- function(study_path, pipeline_variables) {
         remaining_pipeline <- pipeline_variables
         matched_pipeline <- character()
         matched_distances <- numeric()
+        unmatched_crf <- character()
         
         for (crf_var in crf_variables) {
           if (length(remaining_pipeline) == 0) {
             matched_pipeline <- c(matched_pipeline, NA)
             matched_distances <- c(matched_distances, NA)
+            unmatched_crf <- c(unmatched_crf, crf_var)
             next
           }
           
@@ -285,10 +294,15 @@ create_map2 <- function(study_path, pipeline_variables) {
           best_match <- remaining_pipeline[best_index]
           best_distance <- distances[best_index]
           
-          matched_pipeline <- c(matched_pipeline, best_match)
-          matched_distances <- c(matched_distances, best_distance)
-          
-          remaining_pipeline <- remaining_pipeline[-best_index]
+          if (best_distance <= distance_threshold) {
+            matched_pipeline <- c(matched_pipeline, best_match)
+            matched_distances <- c(matched_distances, best_distance)
+            remaining_pipeline <- remaining_pipeline[-best_index]
+          } else {
+            matched_pipeline <- c(matched_pipeline, NA)
+            matched_distances <- c(matched_distances, NA)
+            unmatched_crf <- c(unmatched_crf, crf_var)
+          }
         }
         
         my_map <- data.frame(
@@ -299,6 +313,8 @@ create_map2 <- function(study_path, pipeline_variables) {
         )
         
         list_of_maps[[n]] <- my_map
+        list_of_unmatched_crf[[n]] <- unmatched_crf
+        list_of_unmatched_pipeline[[n]] <- remaining_pipeline
       } else {
         warning(sprintf("No pipeline variables found for form '%s'.", n))
         list_of_maps[[n]] <- data.frame(
@@ -307,21 +323,32 @@ create_map2 <- function(study_path, pipeline_variables) {
           distance = NA,
           stringsAsFactors = FALSE
         )
+        list_of_unmatched_crf[[n]] <- crf_variables
+        list_of_unmatched_pipeline[[n]] <- character()
       }
     } else {
       message(sprintf("Dataset '%s' is NULL and was skipped.", n))
     }
   }
   
-  return(list_of_maps)
+  return(list(
+    maps = list_of_maps,
+    unmatched_crf = list_of_unmatched_crf,
+    unmatched_pipeline = list_of_unmatched_pipeline
+  ))
 }
 
 
-check=create_map2('Z:/Biostats/Studies/PTL-1000234-G7-Test-Drive-IH4/Data/Rawdata/',pipeline)
 
+check=create_map2('Z:/Biostats/Studies/PTL-1000234-G7-Test-Drive-IH4/Data/Rawdata/',pipeline)
+#check=create_map2('Z:/Biostats/Studies/PTL1000234_Test_Drive_IH5_S024/Data/Rawdata/',pipeline)
+
+matches=check[1]$maps
+crf_not_matched=check[2]$unmatched_crf
+pipeline_vars_not_matched=check[3]$unmatched_pipeline
 
 #look through each dataset, and count the variables that are not matching. 
-combined_maps=do.call(rbind,check)
+combined_maps=do.call(rbind,matches)
 
 #flag the variables that are not equal (map was wrong)
 
@@ -334,7 +361,7 @@ mismatched=combined_maps%>%filter(flag_diff=='TRUE')
 sum(combined_maps$crf_name_original!=combined_maps$linked_pipeline,na.rm = TRUE)
 
 
-additional_comments=read_sas('Z:/Biostats/Studies/PTL-1000234-G7-Test-Drive-IH3/Data/Rawdata/Device_Issue.sas7bdat')
+additional_comments=read_sas('Z:/Biostats/Studies/PTL1000234_Test_Drive_IH5_S024/Data/Rawdata/Time_Check.sas7bdat')
 
 
 
