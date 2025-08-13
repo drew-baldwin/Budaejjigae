@@ -29,7 +29,7 @@ var_dict=var_dict%>%select('Form Name','Form Export Name','Form External ID','Va
 
 #get only the automation pipeline variable name, and its text from CRF. 
 
-pipeline=var_dict%>%select('Form Name','Form Export Name','Variable Name','SAS Label Export')
+pipeline=var_dict%>%select('Form Name','Form Export Name','Variable Name','Variable Export Name','SAS Label Export')
 
 
 
@@ -38,7 +38,7 @@ pipeline_vars=pipeline$`Variable Name`
 #make a new column in the pipeline for pipeline form names, cleaned up
 pipeline$forms=trimws(gsub('_S0\\w*','',pipeline$`Form Export Name`)) #note this may need to change based on study.
 
-pipeline=pipeline%>%select('Variable Name','SAS Label Export','forms')
+pipeline=pipeline%>%select('Variable Export Name','SAS Label Export','forms')
 
 
 #because the data dictionary does not seem to have medrioid/subjectID/subject status, and the form (CRF form name) 
@@ -48,6 +48,7 @@ pipeline=pipeline%>%select('Variable Name','SAS Label Export','forms')
 crf_forms=unique(pipeline$forms)
 
 #for each of the unique forms, we need to add a variable (row) for medrioid, subjectid, subject status, and also the form name itself.
+
 medrioid=c('medrioid','Medrio ID',NA)
 subjectid=c('subjectid','Subject ID',NA)
 subjectstatus=c('subjectstatus','Subject Status',NA)
@@ -56,9 +57,10 @@ site=c('site','Site',NA)
 formentrydate=c('formentrydt','Form Entry Date',NA)
 visit=c('visit','Visit',NA)
 subjectvstformid=c('subjectvstformid','Subject Visit Form ID',NA)
+vargroup1row=c('vargroup1row','vargroup1row',NA)
 
 
-total_addition=data.frame(rbind(medrioid,subjectid,subjectstatus,form_name,site,formentrydate,visit,subjectvstformid))
+total_addition=data.frame(rbind(medrioid,subjectid,subjectstatus,form_name,site,formentrydate,visit,subjectvstformid,vargroup1row))
 colnames(total_addition)=names(pipeline)
 
 updated_pipeline=list()
@@ -218,7 +220,7 @@ create_map=function(study_path,pipeline_variables){
 }
 
 
-check=create_map('Z:/Biostats/Studies/PTL-1000234-G7-Test-Drive-IH3/Data/Rawdata/',pipeline)
+check=create_map('Z:/Biostats/Studies/PTL-1000234-G7-Test-Drive-IH4/Data/Rawdata/',pipeline)
 
 
 #look through each dataset, and count the variables that are not matching. 
@@ -241,101 +243,81 @@ sum(combined_maps$crf_name_original!=combined_maps$linked_pipeline)
 
 
 
-create_map2=function(study_path,pipeline_variables){
-  
-  
-  #we again read in all the SAS datasets, but this time we store the data, and the name used to filter to that form
+create_map2 <- function(study_path, pipeline_variables) {
+
   
   file_names <- list.files(path = study_path, pattern = "\\.sas7bdat$", full.names = TRUE)
-  
-  
-  #make temporary subset to make sure the function works 
-  subset=file_names[1:length(file_names)]
-  #subset=sas_files[1:3]
-  
-  #df_names=file_path_sans_ext(basename(subset))
-  df_names=trimws(gsub('_S0\\w*','',file_path_sans_ext(basename(subset))))
-  
-  df_names2=df_names%>%unlist() #this is needed to access the names in for loop later
-  
-  crf_datasets=setNames(lapply(subset,read_sas),df_names)
-  
-  
-  #need to add a step, because the SAS datasets have '_coded' attached to some variables. 
-  #for us we can remove these variables from the datasets initially to get a working prototype.
-  
+  subset <- file_names[1:length(file_names)]
+  df_names <- trimws(gsub('_S0\\w*', '', file_path_sans_ext(basename(subset))))
+  df_names2 <- df_names %>% unlist()
+  crf_datasets <- setNames(lapply(subset, read_sas), df_names)
   
   crf_datasets <- lapply(crf_datasets, function(df) {
     df %>% select(!contains("_CODED"))
   })
   
-  
-  
-  
   list_of_maps <- list()
   
   for (n in df_names2) {
-    
     if (!is.null(crf_datasets[[n]])) {
-      
       pipeline_variables <- total_pipeline %>%
         filter(forms %in% n) %>%
-        pull(`Variable Name`)%>%tolower()
+        pull(`Variable Export Name`) %>%
+        tolower()
       
       names(crf_datasets[[n]]) <- tolower(names(crf_datasets[[n]]))
       crf_variables <- names(crf_datasets[[n]])
       
       if (length(pipeline_variables) > 0) {
+        remaining_pipeline <- pipeline_variables
+        matched_pipeline <- character()
+        matched_distances <- numeric()
         
-        
-        # Create distance matrix
-        distance_matrix <- stringdistmatrix(crf_variables, pipeline_variables, method = "jw")
-        
-        
-        n_rows <- length(crf_variables)
-        n_cols <- length(pipeline_variables)
-        
-        if (n_rows > n_cols) {
-          pad_matrix <- matrix(max(distance_matrix) + 1, nrow = n_rows, ncol = n_rows - n_cols)
-          distance_matrix <- cbind(distance_matrix, pad_matrix)
+        for (crf_var in crf_variables) {
+          if (length(remaining_pipeline) == 0) {
+            matched_pipeline <- c(matched_pipeline, NA)
+            matched_distances <- c(matched_distances, NA)
+            next
+          }
+          
+          distances <- stringdist(crf_var, remaining_pipeline, method = "jw")
+          best_index <- which.min(distances)
+          best_match <- remaining_pipeline[best_index]
+          best_distance <- distances[best_index]
+          
+          matched_pipeline <- c(matched_pipeline, best_match)
+          matched_distances <- c(matched_distances, best_distance)
+          
+          remaining_pipeline <- remaining_pipeline[-best_index]
         }
         
+        my_map <- data.frame(
+          crf_name_original = crf_variables,
+          linked_pipeline = matched_pipeline,
+          distance = matched_distances,
+          stringsAsFactors = FALSE
+        )
         
-        
-        
-        # Solve assignment problem (Hungarian algorithm)
-        assignment <- solve_LSAP(distance_matrix)
-        
-        # Get matched pipeline variables
-        matched_pipeline <- pipeline_variables[assignment]
-        
-        
+        list_of_maps[[n]] <- my_map
       } else {
         warning(sprintf("No pipeline variables found for form '%s'.", n))
-        min_distance <- rep(NA, length(crf_variables))
+        list_of_maps[[n]] <- data.frame(
+          crf_name_original = crf_variables,
+          linked_pipeline = NA,
+          distance = NA,
+          stringsAsFactors = FALSE
+        )
       }
-      
-      my_map <- data.frame(
-        crf_name_original = crf_variables,
-        linked_pipeline = min_distance,
-        stringsAsFactors = FALSE
-      )
-      
-      list_of_maps[[n]] <- my_map
-      #list_of_maps[[n]] <- pipeline_variables
-      
     } else {
       message(sprintf("Dataset '%s' is NULL and was skipped.", n))
     }
   }
-  #return(pipeline_variables)
-  
   
   return(list_of_maps)
 }
 
 
-check=create_map('Z:/Biostats/Studies/PTL-1000234-G7-Test-Drive-IH3/Data/Rawdata/',pipeline)
+check=create_map2('Z:/Biostats/Studies/PTL-1000234-G7-Test-Drive-IH4/Data/Rawdata/',pipeline)
 
 
 #look through each dataset, and count the variables that are not matching. 
@@ -349,9 +331,10 @@ combined_maps=combined_maps %>% mutate(flag_diff = crf_name_original != linked_p
 mismatched=combined_maps%>%filter(flag_diff=='TRUE')
 
 
-sum(combined_maps$crf_name_original!=combined_maps$linked_pipeline)
+sum(combined_maps$crf_name_original!=combined_maps$linked_pipeline,na.rm = TRUE)
 
 
+additional_comments=read_sas('Z:/Biostats/Studies/PTL-1000234-G7-Test-Drive-IH3/Data/Rawdata/Device_Issue.sas7bdat')
 
 
 
