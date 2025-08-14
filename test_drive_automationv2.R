@@ -339,6 +339,8 @@ ui <- navbarPage(theme = shinytheme("lumen"),"In House Study Analysis",
                             
                             #fileInput('raw_sensor_files','Choose the CGM files to upload',multiple=TRUE),
                             fileInput('crf_files','Choose CRF Files To Upload', multiple=TRUE),
+                            selectInput('target_df','Select the Derived Data to Build',choices=c('','A_pop','Accuracy','Precision'),selected=''),
+                            
                             uiOutput('dataset_selector'),
                             actionButton('merge_btn','Merge Selected Datasets'),
                             #fileInput('Lead_file','Choose the Primary Analysis Data',multiple=TRUE),
@@ -812,16 +814,70 @@ server <- function(input, output) {
     
   })
   
-  
-  
-  merged_data <- eventReactive(input$merge_btn, {
-    req(input$selected_datasets)
-    selected <- crf_datasets()[input$selected_datasets]
-    validate(
-      need(length(selected) >= 2, "Please select at least two datasets to merge.")
-    )
-    Reduce(function(x, y) merge(x, y, by = "SubjectID"), selected)
+  output$dataset_selector <- renderUI({
+    req(crf_datasets())
+    checkboxGroupInput("selected_datasets", "Select Datasets to Merge",
+                       choices = names(crf_datasets()))
   })
+  
+  merged_result=eventReactive(input$merge_btn, {
+    
+    #req(input$target_choice != "")
+    req(input$selected_datasets)
+    selected=input$selected_datasets
+    
+    data_list=crf_datasets()
+    
+    if(input$target_df=='A_pop'){
+      
+      merged=data_list[[selected[1]]]
+      
+      for(i in 2:length(selected)){
+        merged=full_join(merged,data_list[[selected[i]]],by='SubjectID')
+      }
+      
+      return(merged)
+    }
+    
+    else if(input$target_df=='Accuracy'){
+      merged=data_list[[selected[1]]]
+      
+      for(i in 2:length(selected)){
+        merged=full_join(merged,data_list[[selected[i]]],by='SubjectID')
+      }
+      
+      return(merged)
+    }
+    else if(input$target_df=='Precision'){
+      merged=data_list[[selected[1]]]
+      
+      for(i in 2:length(selected)){
+        
+        merged=full_join(merged,data_list[[selected[i]]],by='SubjectID')
+        
+      }
+      return(merged)
+    }
+    
+    
+    
+    
+    
+  })
+  
+  
+
+  
+  
+  
+  # merged_data <- eventReactive(input$merge_btn, {
+  #   req(input$selected_datasets)
+  #   selected <- crf_datasets()[input$selected_datasets]
+  #   validate(
+  #     need(length(selected) >= 2, "Please select at least two datasets to merge.")
+  #   )
+  #   Reduce(function(x, y) merge(x, y, by = "SubjectID"), selected)
+  # })
   
   
   
@@ -883,15 +939,11 @@ server <- function(input, output) {
   })
   
   
-  output$dataset_selector <- renderUI({
-    req(crf_datasets())
-    checkboxGroupInput("selected_datasets", "Select Datasets to Merge",
-                       choices = names(crf_datasets()))
-  })
+
   
   
   output$merged_table <- renderTable({
-    merged_data()
+    merged_result()
   })
   
   
