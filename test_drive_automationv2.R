@@ -176,10 +176,11 @@ create_map2 <- function(study_path, pipeline_variables, distance_threshold = 0.2
   
   
   file_names <- list.files(path = study_path, pattern = "\\.sas7bdat$", full.names = TRUE)
-  subset <- file_names[1:length(file_names)]
-  df_names <- trimws(gsub('_S0\\w*', '', file_path_sans_ext(basename(subset))))
+  file_names2 <- head(file_names, 4)
+  #subset <- file_names[1:4]
+  df_names <- trimws(gsub('_S0\\w*', '', file_path_sans_ext(basename(file_names2))))
   df_names2 <- df_names %>% unlist()
-  crf_datasets <- setNames(lapply(subset, read_sas), df_names)
+  crf_datasets <- setNames(lapply(file_names2, read_sas), df_names)
   
   crf_datasets <- lapply(crf_datasets, function(df) {
     df %>% select(!contains("_CODED"))
@@ -190,6 +191,7 @@ create_map2 <- function(study_path, pipeline_variables, distance_threshold = 0.2
   list_of_unmatched_pipeline <- list()
   
   for (n in df_names2) {
+    print(n)
     if (!is.null(crf_datasets[[n]])) {
       pipeline_variables <- total_pipeline %>%
         filter(forms %in% n) %>%
