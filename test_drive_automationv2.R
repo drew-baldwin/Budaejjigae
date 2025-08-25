@@ -26,7 +26,7 @@ library('text2vec')
 
 
 
-
+options(shiny.maxRequestSize = 293 * 1024^2)  
 #using Junrui's function to process each individual file in the sensor data folder.
 process_file = function(filei){
   
@@ -340,7 +340,7 @@ ui <- navbarPage(theme = shinytheme("lumen"),"In House Study Analysis",
                             
                             
                             #fileInput('raw_sensor_files','Choose the CGM files to upload',multiple=TRUE),
-                            fileInput('crf_files','Choose CRF Files To Upload', multiple=TRUE),
+                            textInput('crf_files','Enter study path to upload CRF data'),
                             selectInput('target_df','Select the Derived Data to Build',choices=c('','A_pop','Accuracy','Precision'),selected=''),
                             
                             uiOutput('dataset_selector'),
@@ -396,7 +396,7 @@ ui <- navbarPage(theme = shinytheme("lumen"),"In House Study Analysis",
                             
                             
                             
-                            fileInput('sensor_files','Choose Sensor Files', multiple=TRUE),
+                            fileInput('sensor_files','Choose QC Data', multiple=TRUE),
                             fileInput('Lead_file','Choose the Primary Analysis Data',multiple=TRUE),
                             #fileInput('QC_file','Choose QC Dataset', multiple=TRUE),
                             
@@ -643,32 +643,33 @@ server <- function(input, output) {
   
   #first read in the sensor files to build derived sensor data.
   combined_data=reactive({
+    
     req(input$sensor_files)
+    qc_data=read_sas(input$sensor_files$datapath)
     
-    
-    raw_sensor_list = lapply(input$sensor_files$datapath, process_file)
-    #raw_sensor_list = mapply(process_file,input$sensor_files$datapath,input$sensor_files$name)
-    raw_sensor =  bind_rows(raw_sensor_list)
-    
-    raw_sensor = raw_sensor %>% distinct() %>%
-      mutate(glucose1 = gsub("Invalid EGV", "\"Invalid EGV\"",glucose1),
-             glucose1 = ifelse(glucose1 == "0","\"0\"",glucose1))
-    
-    raw_sensor$subid=strsplit(input$sensor_files$name,"_")[[1]][3]
-    raw_sensor$sensor=gsub('.csv','',strsplit(input$sensor_files$name,'_')[[1]][6])
-    raw_sensor$serial=strsplit(input$sensor_files$name,'_')[[1]][5]
-    raw_sensor$trnsid=ifelse(nchar(raw_sensor$serial)==6,paste0('00',raw_sensor$serial),raw_sensor$serial)
-    raw_sensor$siteid=strsplit(input$sensor_files$name,'_')[[1]][2]
-    raw_sensor$subject=paste0(raw_sensor$siteid,raw_sensor$subid)
-    raw_sensor$device=toupper(strsplit(input$sensor_files$name,'_')[[1]][4])
-    
-    
-    #mutate(wearloc_cw = ifelse(is.na(wearloc_cw),"",wearloc_cw)) %>%
-    #select(-glucose1,-glucosePredicted1)
-    
-    qc_raw_sensor = raw_sensor 
-    
-    qc_raw_sensor
+    # raw_sensor_list = lapply(input$sensor_files$datapath, process_file)
+    # #raw_sensor_list = mapply(process_file,input$sensor_files$datapath,input$sensor_files$name)
+    # raw_sensor =  bind_rows(raw_sensor_list)
+    # 
+    # raw_sensor = raw_sensor %>% distinct() %>%
+    #   mutate(glucose1 = gsub("Invalid EGV", "\"Invalid EGV\"",glucose1),
+    #          glucose1 = ifelse(glucose1 == "0","\"0\"",glucose1))
+    # 
+    # raw_sensor$subid=strsplit(input$sensor_files$name,"_")[[1]][3]
+    # raw_sensor$sensor=gsub('.csv','',strsplit(input$sensor_files$name,'_')[[1]][6])
+    # raw_sensor$serial=strsplit(input$sensor_files$name,'_')[[1]][5]
+    # raw_sensor$trnsid=ifelse(nchar(raw_sensor$serial)==6,paste0('00',raw_sensor$serial),raw_sensor$serial)
+    # raw_sensor$siteid=strsplit(input$sensor_files$name,'_')[[1]][2]
+    # raw_sensor$subject=paste0(raw_sensor$siteid,raw_sensor$subid)
+    # raw_sensor$device=toupper(strsplit(input$sensor_files$name,'_')[[1]][4])
+    # 
+    # 
+    # #mutate(wearloc_cw = ifelse(is.na(wearloc_cw),"",wearloc_cw)) %>%
+    # #select(-glucose1,-glucosePredicted1)
+    # 
+    # qc_raw_sensor = raw_sensor 
+    # 
+    # qc_raw_sensor
     
     # data_list=lapply(input$sensor_files$datapath,function(path){
     #   tryCatch(read_csv(path),error=function(e) NULL)
@@ -742,23 +743,39 @@ server <- function(input, output) {
     
     req(input$crf_files)
     
+    data_builder_file_path=input$crf_files
+    
+    file_names_db=list.files(path=data_builder_file_path,pattern='\\.sas7bdat$',full.names=TRUE)
+    
+    
+    max_size_bytes <- 300 * 1024  # 300 KB
+    file_sizes <- file.info(file_names_db)$size
+    filtered_files <- file_names_db[file_sizes <= max_size_bytes]
+    
+    
+    
+    data_list=lapply(filtered_files,read_sas)
+    names(data_list)=basename(filtered_files)|>tools::file_path_sans_ext()
+    
+    return(data_list)
+    
     #make list to store the CRF datasets 
-    data_list=list()
-    
-    for(i in seq_len(nrow(input$crf_files))){
-      
-      name=file_path_sans_ext(input$crf_files$name[i])
-      path=input$crf_files$datapath[i]
-      
-      data_list[[name]]=read_sas(path)
-      
-    }
-    data_list
-    
-    
-    
-    
-  })
+  #   data_list=list()
+  #   
+  #   for(i in seq_len(nrow(input$crf_files))){
+  #     
+  #     name=file_path_sans_ext(input$crf_files$name[i])
+  #     path=input$crf_files$datapath[i]
+  #     
+  #     data_list[[name]]=read_sas(path)
+  #     
+  #   }
+  #   data_list
+  #   
+  #   
+  #   
+  #   
+   })
   
   
   
@@ -816,27 +833,82 @@ server <- function(input, output) {
     
   })
   
-  output$dataset_selector <- renderUI({
-    req(crf_datasets())
-    checkboxGroupInput("selected_datasets", "Select Datasets to Merge",
-                       choices = names(crf_datasets()))
-  })
+  # output$dataset_selector <- renderUI({
+  #   req(crf_datasets())
+  #   checkboxGroupInput("selected_datasets", "Select Datasets to Merge",
+  #                      choices = names(crf_datasets()))
+  # })
   
   merged_result=eventReactive(input$merge_btn, {
     
     #req(input$target_choice != "")
-    req(input$selected_datasets)
-    selected=input$selected_datasets
+    #req(input$selected_datasets)
+    #selected=input$selected_datasets
     
     data_list=crf_datasets()
     
+    #get all subject IDs to build sublist 
+    
+    
+    
+    subject_id_df_list <- lapply(names(data_list), function(name) {
+      df <- data_list[[name]]
+      if ("SubjectID" %in% names(df)) {
+        return(data.frame(SubjectID = df$SubjectID, stringsAsFactors = FALSE))
+      } else {
+        return(NULL)
+      }
+    })
+    
+    # Combine into one data frame
+    subject_id_df <- do.call(rbind, subject_id_df_list)
+                             
+    
+    
+    names(data_list)=selected
+    
+    #print(selected)
+    
+    #to build a_pop dataset, composed of sublist, inclusion/exclusion, insertion survey
+    
+    #because we cannot see what datasets are uploaded, we make a map list that only lets those datasets be used.
+    #a_pop_datasets=list('Inclusion_Exclusion'='inclusion','Insertion_Survey'='survey')
+    
+    
+    a_pop_datasets= selected[
+      grepl("inclusion|insertion_survey", selected, ignore.case = TRUE)
+    ]
+    a_pop_builders=data_list[a_pop_datasets]
+    
+    #print(a_pop_builders)
+    
     if(input$target_df=='A_pop'){
       
-      merged=data_list[[selected[1]]]
-      
-      for(i in 2:length(selected)){
-        merged=full_join(merged,data_list[[selected[i]]],by='SubjectID')
+      #filter out the non-useful datasets. 
+      #a_pop_builders=intersect(names(a_pop_datasets),selected)
+      if(length(a_pop_builders)==0){
+        print('No relevant datasets to build A_pop selected')
       }
+      
+      #make dataset names using the a_pop builders datasets 
+      
+      inclusion_exclusion=a_pop_builders[[which(grepl('inclusion_exclusion',names(a_pop_builders),ignore.case=TRUE))]]
+      insertion_survey= a_pop_builders[[which(grepl("insertion_survey", names(a_pop_builders), ignore.case = TRUE))]]
+      
+      #to test, left join inclusion_exclusion and only keep specific variables. 
+      
+      merged=subject_id_df%>%left_join(inclusion_exclusion%>%select(SubjectID,COYN),by='SubjectID')%>%left_join(insertion_survey,by='SubjectID')
+      
+   
+      
+      # merged=a_pop_builders[[1]]
+      # 
+      # for(i in 2:length(a_pop_builders)){
+      #   
+      #   
+      #   
+      #   merged=full_join(merged,a_pop_builders[[i]],by='SubjectID')
+      # }
       
       return(merged)
     }
