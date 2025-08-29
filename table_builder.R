@@ -69,27 +69,65 @@ process_file = function(filei){
 
 #function that computes the point estimates needed for accuracy table
 compute_pe=function(df,flag,d15_col,d20_col,d30_col,d40_col,bias_col,ad_col,rd_col,ard_col){
-  
+
   filtered_flag=df%>%filter(class_config==flag)
-  
+
   my_pes=c(rep(NA,8))
-  
+
   #compute the point estimate using the mean.
-  
+
   my_pes[1]=round(mean(filtered_flag[[d15_col]]),3)*100
   my_pes[2]=round(mean(filtered_flag[[d20_col]]),3)*100
   my_pes[3]=round(mean(filtered_flag[[d30_col]]),3)*100
   my_pes[4]=round(mean(filtered_flag[[d40_col]]),3)*100
-  
+
   #differences
   my_pes[5]=sprintf('%.2f (%.2f)',round(mean(filtered_flag[[bias_col]]),1),round(sd(filtered_flag[[bias_col]]),1))
   my_pes[6]=sprintf('%.2f (%.2f)',round(mean(filtered_flag[[ad_col]]),1),round(sd(filtered_flag[[ad_col]]),1))
   my_pes[7]=sprintf('%.2f (%.2f)',round(mean(filtered_flag[[rd_col]]),1),round(sd(filtered_flag[[rd_col]]),1))
   my_pes[8]=sprintf('%.2f (%.2f)',round(mean(filtered_flag[[ard_col]]),1),round(sd(filtered_flag[[ard_col]]),1))
-  
+
   return(my_pes)
-  
+
 }
+# 
+# compute_pe <- function(df, flag, d15_col, d20_col, d30_col, d40_col, bias_col, ad_col, rd_col, ard_col) {
+#   
+#   filtered_flag <- df %>% filter(class_config == flag)
+#   
+#   my_pes <- vector("list", 8)
+#   
+#   # Helper function to compute mean * 100 if column exists
+#   safe_mean_pct <- function(data, col) {
+#     if (!is.null(col) && col %in% names(data)) {
+#       return(round(mean(data[[col]], na.rm = TRUE), 3) * 100)
+#     } else {
+#       return(NA)
+#     }
+#   }
+#   
+#   # Helper function to compute mean (SD) if column exists
+#   safe_mean_sd <- function(data, col) {
+#     if (!is.null(col) && col %in% names(data)) {
+#       return(sprintf('%.2f (%.2f)', round(mean(data[[col]], na.rm = TRUE), 1), round(sd(data[[col]], na.rm = TRUE), 1)))
+#     } else {
+#       return(NA)
+#     }
+#   }
+#   
+#   # Compute metrics
+#   my_pes[[1]] <- safe_mean_pct(filtered_flag, d15_col)
+#   my_pes[[2]] <- safe_mean_pct(filtered_flag, d20_col)
+#   my_pes[[3]] <- safe_mean_pct(filtered_flag, d30_col)
+#   my_pes[[4]] <- safe_mean_pct(filtered_flag, d40_col)
+#   
+#   my_pes[[5]] <- safe_mean_sd(filtered_flag, bias_col)
+#   my_pes[[6]] <- safe_mean_sd(filtered_flag, ad_col)
+#   my_pes[[7]] <- safe_mean_sd(filtered_flag, rd_col)
+#   my_pes[[8]] <- safe_mean_sd(filtered_flag, ard_col)
+#   
+#   return(unlist(my_pes))
+# }
 
 
 
@@ -423,62 +461,62 @@ server <- function(input, output) {
   
   output$column_select_d15 <- renderUI({
     req(my_analysis_data())
-    selectInput("d15_flag", "Select column for D15 Flag", choices = names(my_analysis_data()))
+    selectInput("d15_flag", "Select column for D15 Flag", choices = c("None"="",names(my_analysis_data())),selected = "")
   })
   
   output$column_select_d20 <- renderUI({
     req(my_analysis_data())
-    selectInput("d20_flag", "Select column for D20 Flag", choices = names(my_analysis_data()))
+    selectInput("d20_flag", "Select column for D20 Flag", choices = c("None"="",names(my_analysis_data())),selected = "")
   })
   
   output$column_select_d30 <- renderUI({
     req(my_analysis_data())
-    selectInput("d30_flag", "Select column for D30 Flag", choices = names(my_analysis_data()))
+    selectInput("d30_flag", "Select column for D30 Flag", choices = c("None"="",names(my_analysis_data())),selected = "")
   })
   
   output$column_select_d40 <- renderUI({
     req(my_analysis_data())
-    selectInput("d40_flag", "Select column for D40 Flag", choices = names(my_analysis_data()))
+    selectInput("d40_flag", "Select column for D40 Flag", choices = c("None"="",names(my_analysis_data())),selected = "")
   })
   
   output$column_select_ad=renderUI({
     req(my_analysis_data())
-    selectInput('ad_flag','Select column for AD Flag',choices=names(my_analysis_data()))
+    selectInput('ad_flag','Select column for AD Flag',choices=c("None"="",names(my_analysis_data())),selected = "")
     
     
   })
   
   output$column_select_ard=renderUI({
     req(my_analysis_data())
-    selectInput('ard_flag','Select column for ARD Flag',choices=names(my_analysis_data()))
+    selectInput('ard_flag','Select column for ARD Flag',choices=c("None"="",names(my_analysis_data())),selected = "")
     
     
   })
   
   output$column_select_rd=renderUI({
     req(my_analysis_data())
-    selectInput('rd_flag','Select column for RD Flag',choices=names(my_analysis_data()))
+    selectInput('rd_flag','Select column for RD Flag',choices=c("None"="",names(my_analysis_data())),selected = "")
     
     
   })
   
   output$column_select_bias=renderUI({
     req(my_analysis_data())
-    selectInput('bias_flag','Select column for Bias Flag',choices=names(my_analysis_data()))
+    selectInput('bias_flag','Select column for Bias Flag',choices=c("None"="",names(my_analysis_data())),selected = "")
     
     
   })
   
   output$column_select_stratification=renderUI({
     req(my_analysis_data())
-    selectInput('strat_flag','Select column for Stratification Flag',choices=names(my_analysis_data()))
+    selectInput('strat_flag','Select column for Stratification Flag',choices=c("None"="",names(my_analysis_data())),selected = "")
     
     
   })
   
   output$column_select_filter=renderUI({
     req(my_analysis_data())
-    selectInput('filter_flag','Select column for Filtering Flag',choices=names(my_analysis_data()))
+    selectInput('filter_flag','Select column for Filtering Flag',choices=c("None"="",names(my_analysis_data())),selected = "")
     
     
   })
@@ -486,27 +524,51 @@ server <- function(input, output) {
 
   
   
+  selected_columns <- reactive({
+    req(input$strat_flag, input$filter_flag)  # These are required for filtering and grouping
+    
+    cols <- c(
+      "subject",
+      input$d15_flag,
+      input$d20_flag,
+      input$d30_flag,
+      input$d40_flag,
+      input$bias_flag,
+      input$ad_flag,
+      input$ard_flag,
+      input$rd_flag,
+      input$strat_flag,
+      input$filter_flag
+    )
+    
+    # Remove empty or NULL selections
+    cols <- cols[nzchar(cols)]
+    
+    # Keep only columns that exist in the dataset
+    cols[cols %in% names(my_analysis_data())]
+  })
   
   
   
   output$accuracy=renderTable({
     
+
     
     
-    all_inputs_selected <- reactive({
-      all(
-        nzchar(input$d15_flag),
-        nzchar(input$d20_flag),
-        nzchar(input$d30_flag),
-        nzchar(input$d40_flag),
-        nzchar(input$bias_flag),
-        nzchar(input$ad_flag),
-        nzchar(input$ard_flag),
-        nzchar(input$rd_flag),
-        nzchar(input$strat_flag),
-        nzchar(input$filter_flag)
-      )
-    })
+    # all_inputs_selected <- reactive({
+    #   all(
+    #     nzchar(input$d15_flag),
+    #     nzchar(input$d20_flag),
+    #     nzchar(input$d30_flag),
+    #     nzchar(input$d40_flag),
+    #     nzchar(input$bias_flag),
+    #     nzchar(input$ad_flag),
+    #     nzchar(input$ard_flag),
+    #     nzchar(input$rd_flag),
+    #     nzchar(input$strat_flag),
+    #     nzchar(input$filter_flag)
+    #   )
+    # })
     
     
     
@@ -516,14 +578,17 @@ server <- function(input, output) {
     
     if(input$dropdown=='Accuracy'){
       req(my_analysis_data())
-      req(all_inputs_selected())
+      req(selected_columns())
+      #req(all_inputs_selected())
       
       
  
       
       #names(my_analysis_data)=tolower(names(my_analysis_data()))
       
-      matched_pairs=my_analysis_data()%>%select(subject, input$d15_flag,input$d20_flag,input$d30_flag,input$d40_flag, input$bias_flag, input$ad_flag, input$ard_flag, input$rd_flag, input$strat_flag, input$filter_flag)
+      #matched_pairs=my_analysis_data()%>%select(subject, input$d15_flag,input$d20_flag,input$d30_flag,input$d40_flag, input$bias_flag, input$ad_flag, input$ard_flag, input$rd_flag, input$strat_flag, input$filter_flag)
+      matched_pairs = my_analysis_data() %>% select(all_of(selected_columns()))
+      
       
       
       matched_pairs=matched_pairs%>%mutate(class_config=as.numeric(factor(!!sym(input$strat_flag))))
